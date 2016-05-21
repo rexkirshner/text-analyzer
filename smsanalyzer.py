@@ -100,6 +100,12 @@ class History(object):
         
         return older
     
+    
+    '''
+    Done entirely while drunk, can definitely be optimized/rewritten to be much easier to read
+    
+    5/20/2016
+    '''
     def histogram_data(self, resolution = 'month', combined = True, start = None, stop = None):
         s_date = start if start else self.start_date()
         e_date = stop if stop else self.end_date()
@@ -107,15 +113,16 @@ class History(object):
         s, e = self.search_date_range(s_date, e_date)
         flat_messages = {}
         if combined:
-            flat_messages =  {'combined':[timestamp(x[0].date()) for x in self._sms_history[s:e]]}
+            flat_messages =  {'Combined':[timestamp(x[0].date()) for x in self._sms_history[s:e]]}
         else:
             for participant in self.participants + ['Me']:
                 flat_messages[participant] = [timestamp(x[0].date()) for x in self._sms_history[s:e] if x[1][1] == participant]
         
         plt_data = []
         for history in flat_messages.items():
+            label = history[0]
             mpl_data = mdates.epoch2num(history[1])
-            plt_data += [mpl_data]   
+            plt_data += [(label, mpl_data)]   
 
         elapsed_time = e_date - s_date
         if  resolution == 'day':
@@ -131,10 +138,14 @@ class History(object):
             locator = mdates.MonthLocator()
             formator = mdates.DateFormatter('%m-%y')
         
-        y, bin_edges = np.histogram(plt_data, bins = num_buckets)
-        bin_centers = 0.5*(bin_edges[1:]+bin_edges[:-1])
-        
-        return (y, bin_edges, bin_centers)
+        data_sets = []
+        for person in plt_data:
+            y, bin_edges = np.histogram(person[1], bins = num_buckets)
+            bin_centers = 0.5*(bin_edges[1:]+bin_edges[:-1])
+
+            data_sets.append((person[0], y, bin_centers))
+            
+        return data_sets
 
     
    
@@ -152,26 +163,32 @@ class History(object):
 
 class Grapher(object):
     
+    COLORS = ['red', 'blue']
+    
     def __init__(self):
-        self._data_sets = {}
-        pass
+        self._curr_col_i = 0
+        fig, ax = plt.subplots(1, 1)
+        self.axes = [(ax,[])]
     
-    def add_histogram(self, data):
-        fig, ax = plt.subplots(1,1)
-        
-        y, bin_edges, bin_centers = data
-        
-        
-        ax.plot(bin_centers, y, '-') 
-                
-        self._data_sets.append(ax)
-        
-        
+    def add_histograms(self, data_sets, **settings):
+        for data in data_sets:
+            print(settings.items())
+            self.add_histogram(data, settings)
+    '''
+    This probably needs a look too 
     
-    def graph(self, **settings):
-        ax = self._data_sets[0]
-        resolution = settings.get('resolution', 'month')
+    -Drunk Rex    
+    5/20/2016
+    '''
+    def add_histogram(self, data, settings):
+        ax_and_data = self.axes[0]
+        ax = ax_and_data[0]
+        label, y, bin_centers = data
 
+        chart_type = settings.get('chart_type', 'bar')
+        
+        resolution = settings.get('resolution', 'month')
+        width = 100
         if  resolution == 'day':
             locator = mdates.DayLocator()
             formator = mdates.DateFormatter('%m-%d-%y')
@@ -181,17 +198,62 @@ class Grapher(object):
         else:
             locator = mdates.MonthLocator()
             formator = mdates.DateFormatter('%m-%y')
+        
+        if chart_type == 'line':
+            ax.plot(bin_centers, y, '-', label = label, color = Grapher.COLORS[self._curr_col_i]) 
+        elif chart_type == 'bar':
+            bottom = ax_and_data[1][-1] if len(ax_and_data[1]) >= 1 else None
+            ax.bar(bin_centers, y, width = width, label = label, color = Grapher.COLORS[self._curr_col_i], bottom=bottom)
+
+        ax_and_data[1].append(y)
+        self._curr_col_i += 1 
+        
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(formator)
         ax.legend()
+        
+        
+    def graph(self, **settings):
         if settings.get('log_scale', False):
             plt.yscale('log', nonposy='clip')
 
-        
         plt.show()
     
 
 if __name__ == '__main__':
+
+    messsage_to_sober_rex = '''
+        -When you graph by year the bar charts are to the right of the ticks, but not in the middle. Why?
+        --Probably true when you graph by month and day but they are too close together
+        -Speaking of day, why does it error? Is it too many points to graph?
+        --check what happens when you try to line graph on day... something weird happens that doesn't happen on bar
+        --never mind, that was stupid... i wrote list instead of line in the options. Same error for bar and line chart
+        I just got distracted by tinder
+        -check your work, I feel like everything I did could be written in 1/5 of the lines 
+        
+        -Figure out how to put a line chart and a bar chart on the same graph
+        -I'm pretty sure you are going to have to create the full list of x values and populate with y values
+        --I have no idea how np.histogram works but I think it just creates values in the buckets where the bucket value is greater than 0
+        ---actually now that I think about it, that wouldn't make sense because it just returns bucket sizes, not a list of x values
+        ----go check wtf bin_edges is. Is it a list? and what is bin_centers, a list? figuring that out will probably answer this question
+        --either way you are going to have to figure out how to graph two sets of texts given you cant assume you texted both people on the same bucket (day/month/year)
+        
+        -WTF are subplots? How does that work?
+        --If I want to put all data on one graph how do I do that without fucking it up?
+        ---When do you set the axis?
+        ----If the data has different axis, does pyplot figure that out or do you have to massage it first?
+        ---If I want to do on graph on top and a bunch below how do I do that?
+        ----I'm thinking total on top, one for each day, texts per time of day for each day below
+        
+        ALL OF THIS IS JUST GRAPHING IS THAT ANALYTICS?
+        
+        I'm pretty sure you're going to be embarrassed you wrote this and not read it
+        
+    '''
+    
+    print(messsage_to_sober_rex)
+    
+    exit(0)
 
     print('\r\n\r\n')  
     print('-----------------------------------------')
@@ -208,10 +270,11 @@ if __name__ == '__main__':
     print()
     
     g = Grapher()
-
-    g.add_histogram(kit_history.histogram_data(resolution = 'month', combined = True, start = None, stop = None))
+    resolution = 'month'
+    data = kit_history.histogram_data(resolution = resolution, combined = False, start = None, stop = None)
+    g.add_histograms(data, resolution = resolution, chart_type = 'line')
           
-    g.graph(resolution='month')
+    g.graph()
     
     
     

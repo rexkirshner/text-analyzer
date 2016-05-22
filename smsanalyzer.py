@@ -1,6 +1,6 @@
 #!/usr/bin/env python3 
 
-import csv, collections, datetime, pprint, os
+import csv, collections, datetime, pprint, os, time
 
 from collections import Counter
 #from datetime import datetime
@@ -127,16 +127,10 @@ class History(object):
         elapsed_time = e_date - s_date
         if  resolution == 'day':
             num_buckets = elapsed_time.days
-            locator = mdates.DayLocator()
-            formator = mdates.DateFormatter('%m-%d-%y')
         elif resolution == 'year':
             num_buckets = int(elapsed_time.days / 365) + 1
-            locator = mdates.YearLocator()
-            formator = mdates.DateFormatter('%Y')
         else:
             num_buckets = int(elapsed_time.days / 30) + 1
-            locator = mdates.MonthLocator()
-            formator = mdates.DateFormatter('%m-%y')
         
         data_sets = []
         for person in plt_data:
@@ -147,8 +141,36 @@ class History(object):
             
         return data_sets
 
-    
-   
+    def histogram_time_of_day(self, resolution = 'hour', combined = True, start = None, stop = None):
+        s_date = start if start else self.start_date()
+        e_date = stop if stop else self.end_date()
+
+        s, e = self.search_date_range(s_date, e_date)
+        
+        days_of_week = [[] for x in range(7)]
+        for message in self._sms_history[s:e]:
+
+            time_of_day = message[0]
+            
+            if resolution == 'hour':
+                num_buckets = 24
+                days_of_week[time_of_day.weekday()] += [time_of_day.hour]
+
+        
+        data_sets = []
+        for day in days_of_week:
+            y, bin_edges = np.histogram(day, bins = num_buckets)
+            bin_centers = 0.5*(bin_edges[1:]+bin_edges[:-1])
+            data_sets.append((y, bin_centers))
+        
+        return data_sets
+     
+                
+            
+        
+                    
+
+
     def start_date(self):
         if '_start' not in locals():
             self._start = self._sms_history[0][0]
@@ -163,7 +185,7 @@ class History(object):
 
 class Grapher(object):
     
-    COLORS = ['red', 'blue']
+    COLORS = ['red', 'blue', 'green']
     
     def __init__(self):
         self._curr_col_i = 0
@@ -172,7 +194,6 @@ class Grapher(object):
     
     def add_histograms(self, data_sets, **settings):
         for data in data_sets:
-            print(settings.items())
             self.add_histogram(data, settings)
     '''
     This probably needs a look too 
@@ -188,7 +209,7 @@ class Grapher(object):
         chart_type = settings.get('chart_type', 'bar')
         
         resolution = settings.get('resolution', 'month')
-        width = 100
+        width = 5
         if  resolution == 'day':
             locator = mdates.DayLocator()
             formator = mdates.DateFormatter('%m-%d-%y')
@@ -202,23 +223,40 @@ class Grapher(object):
         if chart_type == 'line':
             ax.plot(bin_centers, y, '-', label = label, color = Grapher.COLORS[self._curr_col_i]) 
         elif chart_type == 'bar':
+            print('start: %s end: %s' % (bin_centers[0], bin_centers[-1]))
             bottom = ax_and_data[1][-1] if len(ax_and_data[1]) >= 1 else None
             ax.bar(bin_centers, y, width = width, label = label, color = Grapher.COLORS[self._curr_col_i], bottom=bottom)
-
+            print(type(ax))
         ax_and_data[1].append(y)
         self._curr_col_i += 1 
         
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(formator)
+        #ax.format_xdata = mdates.DateFormatter('%Y-%m-%d')
+        print(ax.get_xlim())
+
         ax.legend()
         
         
     def graph(self, **settings):
         if settings.get('log_scale', False):
             plt.yscale('log', nonposy='clip')
-
+        
+        #fig = plt.figure()
+        
+        
         plt.show()
-    
+
+def consolidate_history(name):
+    history = None
+    for f in os.listdir(os.path.join(os.getcwd(), 'messages', name)):
+        next_hist = History(os.path.join(os.getcwd(), 'messages', name, f))            
+        next_hist.load()
+        if history != None:
+            history = history.merge(next_hist)
+        else:
+            history = next_hist
+    return history
 
 if __name__ == '__main__':
 
@@ -248,33 +286,45 @@ if __name__ == '__main__':
         ALL OF THIS IS JUST GRAPHING IS THAT ANALYTICS?
         
         I'm pretty sure you're going to be embarrassed you wrote this and not read it
-        
     '''
     
-    print(messsage_to_sober_rex)
+    #print(messsage_to_sober_rex)
     
-    exit(0)
+    #exit(0)
 
     print('\r\n\r\n')  
     print('-----------------------------------------')
-    kit_history = None
-    for f in os.listdir(os.path.join(os.getcwd(), 'messages/Kit')):
-        next_hist = History(os.path.join(os.getcwd(), 'messages/Kit', f))            
-        next_hist.load()
-        if kit_history != None:
-            kit_history = kit_history.merge(next_hist)
-        else:
-            kit_history = next_hist
-    print(kit_history.getStats())
+    kit_history = consolidate_history('Kit')
     
-    print()
+    #a = History('messages/test files/test1.csv')
+    #a.load()
     
-    g = Grapher()
-    resolution = 'month'
-    data = kit_history.histogram_data(resolution = resolution, combined = False, start = None, stop = None)
-    g.add_histograms(data, resolution = resolution, chart_type = 'line')
+    data_sets = kit_history.histogram_time_of_day()
+    fig, ax = plt.subplots(1, len(data_sets))
+    
+    for i, data in enumerate(data_sets):
+        y, bin_centers = data
+        ax[i].bar(bin_centers, y)
+    plt.show()
+
+    
+    
+    
+    #brett_history = consolidate_history('Brett')
+    
+    #print()
+    
+    #g = Grapher()
+    
+    #resolution = 'month'
+    
+    #data = kit_history.histogram_data(resolution = resolution, combined = False, start = None, stop = None)
+    #g.add_histograms(data, resolution = resolution, chart_type = 'bar')
+    
+    #data = brett_history.histogram_data(resolution = resolution, combined = True, start = None, stop = None)
+    #g.add_histograms(data, resolution = resolution, chart_type = 'line')
           
-    g.graph()
+    #g.graph(log_scale=True)
     
     
     
